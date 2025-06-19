@@ -119,7 +119,9 @@ def main(args):
 
     text_model = "roberta-large"
 
-    data_path = './dataset/MELD.Raw/'
+    # data_path = './dataset/MELD.Raw/'
+    data_path = os.path.join(os.environ.get("SCRATCH_DATA_DIR", "./dataset"), "MELD.Raw") + '/'
+
 
     train_path = data_path + 'train_meld_emo.csv'
     dev_path = data_path + 'dev_meld_emo.csv'

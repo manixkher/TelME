@@ -1,3 +1,4 @@
+import os
 import torch
 from transformers import RobertaTokenizer, RobertaModel, AutoProcessor, AutoImageProcessor
 import librosa
@@ -94,53 +95,109 @@ def get_video(feature_extractor, path):
 
     return inputs["pixel_values"][0]
 
+# def make_batchs(sessions):
+#     label_list = ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise']
+#     batch_input, batch_audio, batch_video, batch_labels = [], [], [], []
+#     max_length = 400000
+#     for session in sessions:
+
+#         inputString = ""
+#         now_speaker = None
+#         for turn, line in enumerate(session):
+#             speaker, utt, video_path , emotion = line
+            
+#             # text
+#             inputString += '<s' + str(speaker+1) + '> ' # s1, s2, s3...
+#             inputString += utt + " "
+#             now_speaker = speaker
+#             files=video_path.split("/")[-1][:-4]
+
+#         audio, rate = librosa.load(video_path)
+#         duration = librosa.get_duration(y=audio, sr=rate)
+#         if duration > 30:
+#             batch_video.append(torch.zeros([8, 3, 224, 224]))
+#             batch_audio.append(torch.zeros([1412]))
+#         else:
+#             # audio
+#             audio_input = get_audio(audio_processor, video_path)
+#             audio_input = audio_input[-max_length:] 
+#             batch_audio.append(audio_input) 
+
+#             # video
+#             video_input = get_video(video_processor, video_path)
+#             batch_video.append(video_input)
+
+#         prompt = "Now"+' <s' + str(now_speaker+1) + '> '+"feels"
+#         concat_string = inputString.strip()
+#         concat_string += " " + "</s>" + " " + prompt
+#         batch_input.append(encode_right_truncated(concat_string, roberta_tokenizer))
+
+
+#         if len(label_list) > 3:
+#             label_ind = label_list.index(emotion)
+#         else:
+#             label_ind = label_list.index(sentiment)
+#         batch_labels.append(label_ind) 
+
+#     batch_input_tokens, batch_attention_masks = padding(batch_input, roberta_tokenizer)
+#     batch_audio = padding_video(batch_audio)
+#     batch_video = torch.stack(batch_video) 
+#     batch_labels = torch.tensor(batch_labels)    
+    
+#     return batch_input_tokens, batch_attention_masks, batch_audio, batch_video, batch_labels
+
 def make_batchs(sessions):
     label_list = ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise']
     batch_input, batch_audio, batch_video, batch_labels = [], [], [], []
     max_length = 400000
+
     for session in sessions:
+        try:
+            inputString = ""
+            now_speaker = None
+            for turn, line in enumerate(session):
+                speaker, utt, video_path, emotion = line
 
-        inputString = ""
-        now_speaker = None
-        for turn, line in enumerate(session):
-            speaker, utt, video_path , emotion = line
-            
-            # text
-            inputString += '<s' + str(speaker+1) + '> ' # s1, s2, s3...
-            inputString += utt + " "
-            now_speaker = speaker
-            files=video_path.split("/")[-1][:-4]
+                inputString += f'<s{speaker + 1}> {utt} '
+                now_speaker = speaker
 
-        audio, rate = librosa.load(video_path)
-        duration = librosa.get_duration(y=audio, sr=rate)
-        if duration > 30:
-            batch_video.append(torch.zeros([8, 3, 224, 224]))
-            batch_audio.append(torch.zeros([1412]))
-        else:
-            # audio
-            audio_input = get_audio(audio_processor, video_path)
-            audio_input = audio_input[-max_length:] 
-            batch_audio.append(audio_input) 
+            # ✅ Skip missing files early
+            if not os.path.exists(video_path):
+                print(f"[Warning] Missing file: {video_path}")
+                continue
 
-            # video
-            video_input = get_video(video_processor, video_path)
-            batch_video.append(video_input)
+            # Try loading audio to check duration
+            audio, rate = librosa.load(video_path)
+            duration = librosa.get_duration(y=audio, sr=rate)
 
-        prompt = "Now"+' <s' + str(now_speaker+1) + '> '+"feels"
-        concat_string = inputString.strip()
-        concat_string += " " + "</s>" + " " + prompt
-        batch_input.append(encode_right_truncated(concat_string, roberta_tokenizer))
+            if duration > 30:
+                batch_video.append(torch.zeros([8, 3, 224, 224]))
+                batch_audio.append(torch.zeros([1412]))
+            else:
+                audio_input = get_audio(audio_processor, video_path)
+                audio_input = audio_input[-max_length:]
+                batch_audio.append(audio_input)
 
+                video_input = get_video(video_processor, video_path)
+                batch_video.append(video_input)
 
-        if len(label_list) > 3:
+            prompt = f"Now <s{now_speaker + 1}> feels"
+            concat_string = inputString.strip() + " </s> " + prompt
+            batch_input.append(encode_right_truncated(concat_string, roberta_tokenizer))
+
             label_ind = label_list.index(emotion)
-        else:
-            label_ind = label_list.index(sentiment)
-        batch_labels.append(label_ind) 
+            batch_labels.append(label_ind)
+
+        except Exception as e:
+            print(f"[Warning] Skipping file {video_path} due to error:\n{e}\n")
+            continue
+
+    if not batch_input:
+        raise RuntimeError("All sessions in this batch failed. Nothing to batch.")
 
     batch_input_tokens, batch_attention_masks = padding(batch_input, roberta_tokenizer)
     batch_audio = padding_video(batch_audio)
-    batch_video = torch.stack(batch_video) 
-    batch_labels = torch.tensor(batch_labels)    
-    
+    batch_video = torch.stack(batch_video)
+    batch_labels = torch.tensor(batch_labels)
+
     return batch_input_tokens, batch_attention_masks, batch_audio, batch_video, batch_labels

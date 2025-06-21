@@ -201,3 +201,61 @@ def make_batchs(sessions):
     batch_labels = torch.tensor(batch_labels)
 
     return batch_input_tokens, batch_attention_masks, batch_audio, batch_video, batch_labels
+
+def make_fixed_window_batchs(context_windows):
+    label_list = ['anger', 'disgust', 'fear', 'joy', 'neutral', 'sadness', 'surprise']
+    batch_input, batch_audio, batch_video, batch_labels = [], [], [], []
+    max_length = 400000
+
+    for context in context_windows:
+        try:
+            inputString = ""
+            now_speaker = None
+            for turn, line in enumerate(context):
+                speaker, utt, video_path, emotion = line
+                inputString += f'<s{speaker + 1}> {utt} '
+                now_speaker = speaker
+                last_video_path = video_path
+                last_emotion = emotion
+
+            # Use only the last utterance's video/audio for the window
+            video_path = last_video_path
+            emotion = last_emotion
+
+            if not os.path.exists(video_path):
+                print(f"[Warning] Missing file: {video_path}")
+                batch_video.append(torch.zeros([8, 3, 224, 224]))
+                batch_audio.append(torch.zeros([1412]))
+            else:
+                audio, rate = librosa.load(video_path)
+                duration = librosa.get_duration(y=audio, sr=rate)
+                if duration > 30:
+                    batch_video.append(torch.zeros([8, 3, 224, 224]))
+                    batch_audio.append(torch.zeros([1412]))
+                else:
+                    audio_input = get_audio(audio_processor, video_path)
+                    audio_input = audio_input[-max_length:]
+                    batch_audio.append(audio_input)
+                    video_input = get_video(video_processor, video_path)
+                    batch_video.append(video_input)
+
+            prompt = f"Now <s{now_speaker + 1}> feels"
+            concat_string = inputString.strip() + " </s> " + prompt
+            batch_input.append(encode_right_truncated(concat_string, roberta_tokenizer))
+
+            label_ind = label_list.index(emotion)
+            batch_labels.append(label_ind)
+
+        except Exception as e:
+            print(f"[Warning] Skipping file {video_path} due to error:\n{e}\n")
+            continue
+
+    if not batch_input:
+        raise RuntimeError("All context windows in this batch failed. Nothing to batch.")
+
+    batch_input_tokens, batch_attention_masks = padding(batch_input, roberta_tokenizer)
+    batch_audio = padding_video(batch_audio)
+    batch_video = torch.stack(batch_video)
+    batch_labels = torch.tensor(batch_labels)
+
+    return batch_input_tokens, batch_attention_masks, batch_audio, batch_video, batch_labels

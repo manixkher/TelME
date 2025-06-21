@@ -23,10 +23,10 @@ from transformers import AutoProcessor, Data2VecAudioModel
 from transformers import AutoImageProcessor, TimesformerModel
 import gc
 
-from preprocessing import *
-from utils import *
-from dataset import *
-from model import *
+from MELD.data.preprocessing import *
+from MELD.utils.utils import *
+from MELD.data.dataset import *
+from MELD.models.model import *
 from meld_kd import *
 
 def parse_args():

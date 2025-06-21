@@ -22,10 +22,10 @@ from transformers import get_linear_schedule_with_warmup
 from transformers import RobertaTokenizer, RobertaModel
 import gc
 
-from preprocessing import *
-from utils import *
-from dataset import *
-from model import *
+from MELD.data.preprocessing import *
+from MELD.utils import *
+from MELD.data.online_data_loader import *
+from MELD.models.model import *
 #from basic_fusion import *
 
 def parse_args():

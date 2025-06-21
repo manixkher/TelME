@@ -9,12 +9,12 @@ warnings.filterwarnings('ignore')
 print('[LOG] Starting MELD/online_inference.py')
 
 from sklearn.metrics import classification_report, confusion_matrix, precision_recall_fscore_support
-from model import Teacher_model
-from student import Student_Audio, Student_Video
-from fusion import ASF
-from online_data_loader import OnlineMELDDataLoader
-from dataset import meld_dataset
-from preprocessing import preprocessing
+from MELD.models.teacher import Teacher_model
+from MELD.models.student import Student_Audio, Student_Video
+from MELD.inference.fusion import ASF
+from MELD.data.online_data_loader import OnlineMELDDataLoader
+from MELD.data.dataset import meld_dataset
+from MELD.data.preprocessing import preprocessing
 import gc
 
 @dataclass
@@ -94,7 +94,7 @@ class OnlineInference:
             text_hidden, _ = self.model_t(text_tokens['input_ids'], text_tokens['attention_mask'])
             audio_hidden, _ = self.audio_s(audio_input)
             video_hidden, _ = self.video_s(video_input)
-            
+                
             pred_logits = self.fusion(text_hidden, audio_hidden, video_hidden)
             pred_emotion = pred_logits.argmax(1)
             emotion = self.emoList[pred_emotion.item()]
